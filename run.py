@@ -199,7 +199,11 @@ def main():
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--smoke", action="store_true", help="Run synthetic fixture without encoder weights.")
     parser.add_argument("--train-only", action="store_true", help="Stop before opening the official test set.")
+    parser.add_argument("--experiment", choices=EXPERIMENTS, action="append",
+                        help="Select training runs. Requires --train-only.")
     args = parser.parse_args()
+    if args.experiment and not args.train_only:
+        parser.error("--experiment requires --train-only.")
     if args.epochs < 1 or args.batch < 1 or args.size < 32 or args.size % 16:
         parser.error("Use positive epochs and batch size, and an image size divisible by 16 and at least 32.")
     if args.device == "cpu":
@@ -224,7 +228,7 @@ def main():
     for x, y, name in list(Tiles(validation_pairs[:4], args.size)):
         samples.append((name, [("SAR", image_for_display(x)), ("Ground truth", COLORS[y.numpy()])]))
     visualize(samples, args.out / "dataset-preview.png")
-    rows = [train(args, name, train_pairs, validation_pairs, weights, split_manifest) for name in EXPERIMENTS]
+    rows = [train(args, name, train_pairs, validation_pairs, weights, split_manifest) for name in dict.fromkeys(args.experiment or EXPERIMENTS)]
     if args.train_only:
         return
     test = split_pairs(args.data, "test")
