@@ -140,7 +140,7 @@ def train(args, name, train_pairs, validation_pairs, weights, split_manifest):
               "size": args.size, "batch": args.batch, "seed": args.seed, "lr": args.lr,
               "device": args.device, "smoke": args.smoke, "split": split_manifest,
               "class_weights": weights.tolist() if balanced else None}
-    if checkpoint and checkpoint["config"] != config:
+    if checkpoint and {**checkpoint["config"], "device": args.device} != config:
         raise ValueError(f"Configuration changed for {name}. Use a new output directory.")
     seed(args.seed)
     model = make_model(architecture, config["encoder_weights"] is not None and checkpoint is None).to(args.device)
@@ -150,7 +150,8 @@ def train(args, name, train_pairs, validation_pairs, weights, split_manifest):
     if checkpoint:
         model.load_state_dict(checkpoint["model"])
         optimizer.load_state_dict(checkpoint["optimizer"])
-        scaler.load_state_dict(checkpoint["scaler"])
+        if checkpoint["config"]["device"] == args.device and checkpoint["scaler"]:
+            scaler.load_state_dict(checkpoint["scaler"])
         history, best_score, best_epoch = (checkpoint[key] for key in ("history", "best_score", "best_epoch"))
     if len(history) > args.epochs:
         raise ValueError("The output already contains more epochs than requested.")
@@ -160,7 +161,7 @@ def train(args, name, train_pairs, validation_pairs, weights, split_manifest):
         seed(args.seed + epoch)
         tr, _ = pass_epoch(model, loader(train_pairs, args, True, epoch), args.device, weights, optimizer, scaler)
         val, _ = pass_epoch(model, validation, args.device, weights)
-        history.append({"epoch": epoch, "train": tr, "validation": val, "seconds": time.perf_counter() - start})
+        history.append({"epoch": epoch, "device": args.device, "train": tr, "validation": val, "seconds": time.perf_counter() - start})
         if val["miou"] > best_score:
             best_score, best_epoch = val["miou"], epoch
             save_checkpoint(directory / "best.pt", {"model": model.state_dict(), "config": config, "epoch": epoch})
